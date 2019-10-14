@@ -24,6 +24,12 @@ class RenderWindow : public QWindow, protected QOpenGLFunctions_4_1_Core
 {
     Q_OBJECT
 public:
+
+    struct Triangle
+    {
+        unsigned int index[3];
+        int neighbour[3];
+    };
     RenderWindow(const QSurfaceFormat &format, MainWindow *mainWindow);
     ~RenderWindow() override;
 
@@ -33,6 +39,10 @@ public:
     void toggleWireframe();
 
     void checkForGLerrors();
+
+    static std::vector<gsl::Vector3D> mapToGrid(const std::vector<gsl::Vector3D> &points, int xGrid, int zGrid, gsl::Vector3D min, gsl::Vector3D max);
+    static float length(const gsl::Vector3D &a, const gsl::Vector3D &b);
+
 
 private slots:
     void render();
@@ -59,7 +69,9 @@ private:
     GLint mTextureUniform{-1};
 
     std::vector<VisualObject*> mVisualObjects;
-    std::vector<gsl::Vector3D> mTerrainPoints;
+    std::vector<Vertex> mTerrainVertices;
+
+    std::vector<Triangle> mTerrainTriangles;
     GLuint mTerrainVAO;
 
     Camera *mCurrentCamera{nullptr};

@@ -113,27 +113,71 @@ void RenderWindow::init()
     mCurrentCamera->setPosition(gsl::Vector3D(-1.f, -.5f, -2.f));
 
     //********************** Terrain Data **************************
-    gsl::LASLoader loader{"../TerrainData/1.las"};
+    gsl::LASLoader loader{"../TerrainData/Mountain.las"};
 
-    mTerrainPoints.reserve(loader.pointCount());
-    for (auto point : loader)
-        mTerrainPoints.emplace_back(point.xNorm(), point.zNorm(), point.yNorm());
+    gsl::Vector3D min{};
+    gsl::Vector3D max{};
+    std::vector<gsl::Vector3D> terrainPoints;
 
-    std::vector<Vertex> terrainVertices;
-    terrainVertices.reserve(mTerrainPoints.size());
-    std::transform(mTerrainPoints.begin(), mTerrainPoints.end(), std::back_inserter(terrainVertices), [](const gsl::Vector3D& point){
+    terrainPoints.reserve(loader.pointCount());
+    for (auto it = loader.begin(); it != loader.end(); it = it + 10)
+    {
+        terrainPoints.emplace_back(it->xNorm(), it->zNorm(), it->yNorm());
+
+        min.x = (terrainPoints.back().x < min.x) ? terrainPoints.back().x : min.x;
+        min.y = (terrainPoints.back().y < min.y) ? terrainPoints.back().y : min.y;
+        min.z = (terrainPoints.back().z < min.z) ? terrainPoints.back().z : min.z;
+
+        max.x = (terrainPoints.back().x > max.x) ? terrainPoints.back().x : max.x;
+        max.y = (terrainPoints.back().y > max.y) ? terrainPoints.back().y : max.y;
+        max.z = (terrainPoints.back().z > max.z) ? terrainPoints.back().z : max.z;
+    }
+
+    int xGridSize{30}, zGridSize{30};
+    terrainPoints = mapToGrid(terrainPoints, xGridSize, zGridSize, min, max);
+    terrainPoints.shrink_to_fit();
+
+
+
+    mTerrainVertices.reserve(terrainPoints.size());
+    std::transform(terrainPoints.begin(), terrainPoints.end(), std::back_inserter(mTerrainVertices), [](const gsl::Vector3D& point){
         return Vertex{(point - 0.5f) * 10.f, {0.18f, 0.33f, 0.8f}, {0, 0}};
     });
+    std::cout << "Point count: " << mTerrainVertices.size() << std::endl;
 
-    std::cout << "Point count: " << terrainVertices.size() << std::endl;
+
+    // Create indices
+    mTerrainTriangles.reserve((xGridSize - 1) * (zGridSize - 1) * 2);
+    for (unsigned int z{0}, i{0}; z < zGridSize - 1; ++z, ++i)
+    {
+        for (unsigned int x{0}; x < xGridSize - 1; ++x, ++i)
+        {
+            mTerrainTriangles.push_back({i, i + 1, i + xGridSize,
+                                        static_cast<int>(mTerrainTriangles.size()) + 1,
+                                        (x != 0) ? static_cast<int>(mTerrainTriangles.size()) - 1 : -1,
+                                        (z != 0) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) - (xGridSize - 1) * 2 - 1) : -1
+                                        });
+
+            mTerrainTriangles.push_back({i + 1, i + 1 + xGridSize, i + xGridSize,
+                                        (z < zGridSize - 2) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) + (zGridSize - 1) * 2 + 1) : -1,
+                                        static_cast<int>(mTerrainTriangles.size()) - 1,
+                                        (x < xGridSize - 2) ? static_cast<int>(mTerrainTriangles.size() + 1) : -1
+                                        });
+        }
+    }
+
 
     glGenVertexArrays(1, &mTerrainVAO);
     glBindVertexArray(mTerrainVAO);
 
-    GLuint terrainVBO;
+    GLuint terrainVBO, terrainEBO;
     glGenBuffers(1, &terrainVBO);
     glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
-    glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(Vertex), terrainVertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, mTerrainVertices.size() * sizeof(Vertex), mTerrainVertices.data(), GL_STATIC_DRAW);
+
+    glGenBuffers(1, &terrainEBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mTerrainTriangles.size() * sizeof(Triangle), mTerrainTriangles.data(), GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)0);
     glEnableVertexAttribArray(0);
@@ -143,6 +187,8 @@ void RenderWindow::init()
     glEnableVertexAttribArray(2);
 
     glBindVertexArray(0);
+
+    // glPointSize(10.f);
 }
 
 ///Called each frame - doing the rendering
@@ -181,7 +227,8 @@ void RenderWindow::render()
         glUniformMatrix4fv( mShaderProgram[0]->pMatrixUniform, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
         glUniformMatrix4fv( mShaderProgram[0]->mMatrixUniform, 1, GL_TRUE, modelMat.constData());
         glBindVertexArray(mTerrainVAO);
-        glDrawArrays(GL_POINTS, 0, mTerrainPoints.size());
+        // glDrawArrays(GL_POINTS, 0, mTerrainPoints.size());
+        glDrawElements(GL_TRIANGLES, mTerrainTriangles.size(), GL_UNSIGNED_INT, 0);
     }
 
     //Calculate framerate before
@@ -196,6 +243,60 @@ void RenderWindow::render()
     // swapInterval is 1 by default which means that swapBuffers() will (hopefully) block
     // and wait for vsync.
     mContext->swapBuffers(this);
+}
+
+std::vector<gsl::Vector3D> RenderWindow::mapToGrid(const std::vector<gsl::Vector3D>& points, int xGrid, int zGrid, gsl::Vector3D min, gsl::Vector3D max)
+{
+    std::vector<std::pair<gsl::Vector3D, unsigned int>> grid;
+    grid.resize(xGrid * zGrid);
+
+    for (auto point : points)
+    {
+        int closestIndex[2]{0, 0};
+        for (int z{0}; z < zGrid; ++z)
+        {
+            for (int x{0}; x < xGrid; ++x)
+            {
+                gsl::Vector3D gridPoint{
+                    x * ((max.x - min.x) / xGrid) + min.x,
+                    0,
+                    z * ((max.z - min.z) / zGrid) + min.z
+                };
+
+                gsl::Vector3D lastClosestPoint{
+                    closestIndex[0] * ((max.x - min.x) / xGrid) + min.x,
+                    0,
+                    closestIndex[1] * ((max.z - min.z) / zGrid) + min.z
+                };
+
+                if ((gsl::Vector3D{point.x, 0, point.z} - gridPoint).length() < (gsl::Vector3D{point.x, 0, point.z} - lastClosestPoint).length())
+                {
+                    closestIndex[0] = x;
+                    closestIndex[1] = z;
+                }
+            }
+        }
+
+        // std::cout << "point is: " << point << std::endl;
+
+        auto& p = grid.at(closestIndex[0] + closestIndex[1] * zGrid);
+        p.first += gsl::Vector3D{
+                closestIndex[0] * ((max.x - min.x) / xGrid) + min.x,
+                point.y,
+                closestIndex[1] * ((max.z - min.z) / zGrid) + min.z};
+        ++p.second;
+    }
+
+    for (auto &p : grid)
+        p.first = (0 < p.second) ? p.first / static_cast<float>(p.second) : gsl::Vector3D{0, 0, 0};
+
+    // convert pair into only first of pair
+    std::vector<gsl::Vector3D> outputs{};
+    std::transform(grid.begin(), grid.end(), std::back_inserter(outputs), [](const std::pair<gsl::Vector3D, unsigned int>& p){
+        return p.first;
+    });
+
+    return outputs;
 }
 
 void RenderWindow::setupPlainShader(int shaderIndex)
