@@ -15,6 +15,8 @@
 #include "xyz.h"
 #include "trianglesurface.h"
 
+#include "LAS/lasloader.h"
+
 RenderWindow::RenderWindow(const QSurfaceFormat &format, MainWindow *mainWindow)
     : mContext(nullptr), mInitialized(false), mMainWindow(mainWindow)
 {
@@ -78,9 +80,9 @@ void RenderWindow::init()
     //NB: hardcoded path to files! You have to change this if you change directories for the project.
     //Qt makes a build-folder besides the project folder. That is why we go down one directory
     // (out of the build-folder) and then up into the project folder.
-    mShaderProgram[0] = new Shader("../GSOpenGL2019/plainvertex.vert", "../GSOpenGL2019/plainfragment.frag");
+    mShaderProgram[0] = new Shader("../TerrainData/plainvertex.vert", "../TerrainData/plainfragment.frag");
     qDebug() << "Plain shader program id: " << mShaderProgram[0]->getProgram();
-    mShaderProgram[1]= new Shader("../GSOpenGL2019/texturevertex.vert", "../GSOpenGL2019/texturefragmet.frag");
+    mShaderProgram[1]= new Shader("../TerrainData/texturevertex.vert", "../TerrainData/texturefragmet.frag");
     qDebug() << "Texture shader program id: " << mShaderProgram[1]->getProgram();
 
     setupPlainShader(0);
@@ -88,7 +90,7 @@ void RenderWindow::init()
 
     //**********************  Texture stuff: **********************
     mTexture[0] = new Texture();
-    mTexture[1] = new Texture("../GSOpenGL2019/Assets/hund.bmp");
+    mTexture[1] = new Texture("../TerrainData/Assets/hund.bmp");
 
     //Set the textures loaded to a texture unit
     glActiveTexture(GL_TEXTURE0);
@@ -109,6 +111,38 @@ void RenderWindow::init()
     //********************** Set up camera **********************
     mCurrentCamera = new Camera();
     mCurrentCamera->setPosition(gsl::Vector3D(-1.f, -.5f, -2.f));
+
+    //********************** Terrain Data **************************
+    gsl::LASLoader loader{"../TerrainData/1.las"};
+
+    mTerrainPoints.reserve(loader.pointCount());
+    for (auto point : loader)
+        mTerrainPoints.emplace_back(point.xNorm(), point.zNorm(), point.yNorm());
+
+    std::vector<Vertex> terrainVertices;
+    terrainVertices.reserve(mTerrainPoints.size());
+    std::transform(mTerrainPoints.begin(), mTerrainPoints.end(), std::back_inserter(terrainVertices), [](const gsl::Vector3D& point){
+        return Vertex{(point - 0.5f) * 10.f, {0.18f, 0.33f, 0.8f}, {0, 0}};
+    });
+
+    std::cout << "Point count: " << terrainVertices.size() << std::endl;
+
+    glGenVertexArrays(1, &mTerrainVAO);
+    glBindVertexArray(mTerrainVAO);
+
+    GLuint terrainVBO;
+    glGenBuffers(1, &terrainVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
+    glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(Vertex), terrainVertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)(3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)(6 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(2);
+
+    glBindVertexArray(0);
 }
 
 ///Called each frame - doing the rendering
@@ -133,12 +167,21 @@ void RenderWindow::render()
         glUniformMatrix4fv( mMatrixUniform0, 1, GL_TRUE, mVisualObjects[0]->mMatrix.constData());
         mVisualObjects[0]->draw();
 
-        glUseProgram(mShaderProgram[1]->getProgram());
-        glUniformMatrix4fv( vMatrixUniform1, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
-        glUniformMatrix4fv( pMatrixUniform1, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
-        glUniformMatrix4fv( mMatrixUniform1, 1, GL_TRUE, mVisualObjects[1]->mMatrix.constData());
-        glUniform1i(mTextureUniform, 1);
-        mVisualObjects[1]->draw();
+//        glUseProgram(mShaderProgram[1]->getProgram());
+//        glUniformMatrix4fv( vMatrixUniform1, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
+//        glUniformMatrix4fv( pMatrixUniform1, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
+//        glUniformMatrix4fv( mMatrixUniform1, 1, GL_TRUE, mVisualObjects[1]->mMatrix.constData());
+//        glUniform1i(mTextureUniform, 1);
+//        mVisualObjects[1]->draw();
+
+        glUseProgram(mShaderProgram[0]->getProgram());
+        gsl::Matrix4x4 modelMat{};
+        modelMat.setToIdentity();
+        glUniformMatrix4fv(mShaderProgram[0]->vMatrixUniform, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
+        glUniformMatrix4fv( mShaderProgram[0]->pMatrixUniform, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
+        glUniformMatrix4fv( mShaderProgram[0]->mMatrixUniform, 1, GL_TRUE, modelMat.constData());
+        glBindVertexArray(mTerrainVAO);
+        glDrawArrays(GL_POINTS, 0, mTerrainPoints.size());
     }
 
     //Calculate framerate before

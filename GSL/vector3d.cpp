@@ -45,6 +45,21 @@ namespace gsl
         return {x - rhs.getX(), y - rhs.getY(), z - rhs.getZ()};
     }
 
+    Vector3D Vector3D::operator+(float rhs) const
+    {
+        return {x + rhs, y + rhs, z + rhs};
+    }
+
+    Vector3D Vector3D::operator-(float rhs) const
+    {
+        return {x - rhs, y - rhs, z - rhs};
+    }
+
+    Vector3D Vector3D::operator/(float rhs) const
+    {
+        return {x / rhs, y / rhs, z / rhs};
+    }
+
 
     Vector3D& Vector3D::operator+=(const Vector3D &rhs)
     {

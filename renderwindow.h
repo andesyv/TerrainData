@@ -59,6 +59,8 @@ private:
     GLint mTextureUniform{-1};
 
     std::vector<VisualObject*> mVisualObjects;
+    std::vector<gsl::Vector3D> mTerrainPoints;
+    GLuint mTerrainVAO;
 
     Camera *mCurrentCamera{nullptr};
 
