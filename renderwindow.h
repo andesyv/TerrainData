@@ -27,6 +27,10 @@ public:
 
     struct Triangle
     {
+        Triangle(std::array<unsigned int, 3> indices = {}, std::array<int, 3> neighbours = {})
+            : index{indices[0], indices[1], indices[2]}, neighbour{neighbours[0], neighbours[1], neighbours[2]}
+        {}
+
         unsigned int index[3];
         int neighbour[3];
     };

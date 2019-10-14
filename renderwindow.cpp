@@ -133,7 +133,7 @@ void RenderWindow::init()
         max.z = (terrainPoints.back().z > max.z) ? terrainPoints.back().z : max.z;
     }
 
-    int xGridSize{30}, zGridSize{30};
+    int xGridSize{10}, zGridSize{10};
     terrainPoints = mapToGrid(terrainPoints, xGridSize, zGridSize, min, max);
     terrainPoints.shrink_to_fit();
 
@@ -143,8 +143,8 @@ void RenderWindow::init()
     std::transform(terrainPoints.begin(), terrainPoints.end(), std::back_inserter(mTerrainVertices), [](const gsl::Vector3D& point){
         return Vertex{(point - 0.5f) * 10.f, {0.18f, 0.33f, 0.8f}, {0, 0}};
     });
-    std::cout << "Point count: " << mTerrainVertices.size() << std::endl;
 
+    std::cout << "Point count: " << mTerrainVertices.size() << std::endl;
 
     // Create indices
     mTerrainTriangles.reserve((xGridSize - 1) * (zGridSize - 1) * 2);
@@ -152,19 +152,25 @@ void RenderWindow::init()
     {
         for (unsigned int x{0}; x < xGridSize - 1; ++x, ++i)
         {
-            mTerrainTriangles.push_back({i, i + 1, i + xGridSize,
-                                        static_cast<int>(mTerrainTriangles.size()) + 1,
-                                        (x != 0) ? static_cast<int>(mTerrainTriangles.size()) - 1 : -1,
-                                        (z != 0) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) - (xGridSize - 1) * 2 - 1) : -1
+            mTerrainTriangles.push_back({{i, i + xGridSize, i + 1},
+                                        {
+                                            static_cast<int>(mTerrainTriangles.size()) + 1,
+                                            (z != 0) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) - (xGridSize - 1) * 2 - 1) : -1,
+                                            (x != 0) ? static_cast<int>(mTerrainTriangles.size()) - 1 : -1
+                                        }
                                         });
 
-            mTerrainTriangles.push_back({i + 1, i + 1 + xGridSize, i + xGridSize,
-                                        (z < zGridSize - 2) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) + (zGridSize - 1) * 2 + 1) : -1,
-                                        static_cast<int>(mTerrainTriangles.size()) - 1,
-                                        (x < xGridSize - 2) ? static_cast<int>(mTerrainTriangles.size() + 1) : -1
+            mTerrainTriangles.push_back({{i + 1, i + xGridSize, i + 1 + xGridSize} ,
+                                        {
+                                            (z < zGridSize - 2) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) + (zGridSize - 1) * 2 + 1) : -1,
+                                            (x < xGridSize - 2) ? static_cast<int>(mTerrainTriangles.size() + 1) : -1,
+                                            static_cast<int>(mTerrainTriangles.size()) - 1
+                                        }
                                         });
         }
     }
+
+    std::cout << "Triangle count: " << mTerrainTriangles.size() << std::endl;
 
 
     glGenVertexArrays(1, &mTerrainVAO);
@@ -175,9 +181,17 @@ void RenderWindow::init()
     glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
     glBufferData(GL_ARRAY_BUFFER, mTerrainVertices.size() * sizeof(Vertex), mTerrainVertices.data(), GL_STATIC_DRAW);
 
+
+    unsigned int *data = new unsigned int[mTerrainTriangles.size() * 3];
+    for (unsigned int i{0}; i < mTerrainTriangles.size(); ++i)
+        for (unsigned int j{0}; j < 3; ++j)
+            data[i * 3 + j] = mTerrainTriangles.at(i).index[j];
+
     glGenBuffers(1, &terrainEBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mTerrainTriangles.size() * sizeof(Triangle), mTerrainTriangles.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mTerrainTriangles.size() * 3 * sizeof(unsigned int), data, GL_STATIC_DRAW);
+
+    delete[] data;
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)0);
     glEnableVertexAttribArray(0);
@@ -227,8 +241,8 @@ void RenderWindow::render()
         glUniformMatrix4fv( mShaderProgram[0]->pMatrixUniform, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
         glUniformMatrix4fv( mShaderProgram[0]->mMatrixUniform, 1, GL_TRUE, modelMat.constData());
         glBindVertexArray(mTerrainVAO);
-        // glDrawArrays(GL_POINTS, 0, mTerrainPoints.size());
-        glDrawElements(GL_TRIANGLES, mTerrainTriangles.size(), GL_UNSIGNED_INT, 0);
+        // glDrawArrays(GL_POINTS, 0, mTerrainVertices.size());
+        glDrawElements(GL_TRIANGLES, mTerrainTriangles.size() * 3, GL_UNSIGNED_INT, 0);
     }
 
     //Calculate framerate before
@@ -247,7 +261,7 @@ void RenderWindow::render()
 
 std::vector<gsl::Vector3D> RenderWindow::mapToGrid(const std::vector<gsl::Vector3D>& points, int xGrid, int zGrid, gsl::Vector3D min, gsl::Vector3D max)
 {
-    std::vector<std::pair<gsl::Vector3D, unsigned int>> grid;
+    std::vector<std::pair<float, unsigned int>> grid;
     grid.resize(xGrid * zGrid);
 
     for (auto point : points)
@@ -277,24 +291,25 @@ std::vector<gsl::Vector3D> RenderWindow::mapToGrid(const std::vector<gsl::Vector
             }
         }
 
-        // std::cout << "point is: " << point << std::endl;
-
         auto& p = grid.at(closestIndex[0] + closestIndex[1] * zGrid);
-        p.first += gsl::Vector3D{
-                closestIndex[0] * ((max.x - min.x) / xGrid) + min.x,
-                point.y,
-                closestIndex[1] * ((max.z - min.z) / zGrid) + min.z};
+        p.first += point.y;
         ++p.second;
     }
 
-    for (auto &p : grid)
-        p.first = (0 < p.second) ? p.first / static_cast<float>(p.second) : gsl::Vector3D{0, 0, 0};
-
     // convert pair into only first of pair
     std::vector<gsl::Vector3D> outputs{};
-    std::transform(grid.begin(), grid.end(), std::back_inserter(outputs), [](const std::pair<gsl::Vector3D, unsigned int>& p){
-        return p.first;
-    });
+    outputs.reserve(grid.size());
+    for (int z{0}; z < zGrid; ++z)
+    {
+        for (int x{0}; x < xGrid; ++x)
+        {
+            auto &p = grid.at(x + z * zGrid);
+
+            outputs.emplace_back(x * ((max.x - min.x) / xGrid) + min.x,
+                                 (0 < p.second) ? p.first / static_cast<float>(p.second) : 0,
+                                 z * ((max.z - min.z) / zGrid) + min.z);
+        }
+    }
 
     return outputs;
 }
