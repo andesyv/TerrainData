@@ -82,6 +82,8 @@ private:
 
     bool mWireframe{false};
 
+    float mSimulationTime;
+
     Input mInput;
     float mCameraSpeed{0.05f};
     float mCameraRotateSpeed{0.1f};

@@ -22,6 +22,8 @@ public:
 
     void init() override;
     void draw() override;
+    void move(float deltaTime) override;
+    void update(float time) override;
 
     ~OctahedronBall() override;
 };

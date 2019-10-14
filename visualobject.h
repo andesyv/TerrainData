@@ -16,7 +16,12 @@ public:
     virtual void init();
     virtual void draw()=0;
 
+    virtual void move(float deltaTime);
+    virtual void update(float time);
+
     gsl::Matrix4x4 mMatrix;
+    gsl::vec3 startPos{};
+    gsl::vec3 mAcceleration{};
 
     std::string mName;
 

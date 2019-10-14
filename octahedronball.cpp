@@ -27,6 +27,8 @@ OctahedronBall::OctahedronBall(int n)
 {
     mVertices.reserve(3 * 8 * std::pow(4, m_rekursjoner));
     oktaederUnitBall();
+
+    mMatrix.setToIdentity();
 }
 
 //!//! \brief OctahedronBall::~OctahedronBall() virtual destructor
@@ -175,4 +177,15 @@ void OctahedronBall::draw()
 {
    glBindVertexArray( mVAO );
    glDrawArrays(GL_TRIANGLES, 0, mVertices.size());//mVertices.size());
+}
+
+void OctahedronBall::move(float deltaTime)
+{
+
+}
+
+void OctahedronBall::update(float time)
+{
+    auto s = startPos + (mAcceleration * std::pow(time, 2)) / 2.f;
+    mMatrix.setPosition(s.x, s.y, s.z);
 }

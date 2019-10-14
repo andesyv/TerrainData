@@ -14,6 +14,7 @@
 
 #include "xyz.h"
 #include "trianglesurface.h"
+#include "octahedronball.h"
 
 #include "LAS/lasloader.h"
 
@@ -108,12 +109,21 @@ void RenderWindow::init()
     temp->init();
     mVisualObjects.push_back(temp);
 
+    temp = new OctahedronBall{3};
+    temp->init();
+    temp->mMatrix.setPosition(0, 10.f, 0);
+    temp->startPos = temp->mMatrix.getPosition();
+    temp->mAcceleration = gsl::vec3{0.f, -9.81f, 0.f};
+    mVisualObjects.push_back(temp);
+
     //********************** Set up camera **********************
     mCurrentCamera = new Camera();
-    mCurrentCamera->setPosition(gsl::Vector3D(-1.f, -.5f, -2.f));
+    mCurrentCamera->setPosition(gsl::Vector3D(-1.f, -.5f, -5.f));
 
     //********************** Terrain Data **************************
     gsl::LASLoader loader{"../TerrainData/Mountain.las"};
+
+    bool flipY = true;
 
     gsl::Vector3D min{};
     gsl::Vector3D max{};
@@ -122,7 +132,7 @@ void RenderWindow::init()
     terrainPoints.reserve(loader.pointCount());
     for (auto it = loader.begin(); it != loader.end(); it = it + 10)
     {
-        terrainPoints.emplace_back(it->xNorm(), it->zNorm(), it->yNorm());
+        terrainPoints.emplace_back(it->xNorm(), (flipY) ? 1.0 - it->zNorm() : it->zNorm(), it->yNorm());
 
         min.x = (terrainPoints.back().x < min.x) ? terrainPoints.back().x : min.x;
         min.y = (terrainPoints.back().y < min.y) ? terrainPoints.back().y : min.y;
@@ -141,7 +151,7 @@ void RenderWindow::init()
 
     mTerrainVertices.reserve(terrainPoints.size());
     std::transform(terrainPoints.begin(), terrainPoints.end(), std::back_inserter(mTerrainVertices), [](const gsl::Vector3D& point){
-        return Vertex{(point - 0.5f) * 10.f, {0.18f, 0.33f, 0.8f}, {0, 0}};
+        return Vertex{(point - 0.5f) * 40.f, {0.18f, 0.33f, 0.8f}, {0, 0}};
     });
 
     std::cout << "Point count: " << mTerrainVertices.size() << std::endl;
@@ -213,6 +223,8 @@ void RenderWindow::render()
 
     mCurrentCamera->update();
 
+    const float deltaTime = mTimeStart.nsecsElapsed() / 1000000000.f;
+
     mTimeStart.restart(); //restart FPS clock
     mContext->makeCurrent(this); //must be called every frame (every time mContext->swapBuffers is called)
 
@@ -226,6 +238,13 @@ void RenderWindow::render()
         glUniformMatrix4fv( pMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
         glUniformMatrix4fv( mMatrixUniform0, 1, GL_TRUE, mVisualObjects[0]->mMatrix.constData());
         mVisualObjects[0]->draw();
+
+        glUseProgram(mShaderProgram[0]->getProgram());
+        mVisualObjects[2]->update(mSimulationTime);
+        glUniformMatrix4fv( vMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
+        glUniformMatrix4fv( pMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
+        glUniformMatrix4fv( mMatrixUniform0, 1, GL_TRUE, mVisualObjects[2]->mMatrix.constData());
+        mVisualObjects[2]->draw();
 
 //        glUseProgram(mShaderProgram[1]->getProgram());
 //        glUniformMatrix4fv( vMatrixUniform1, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
@@ -454,6 +473,8 @@ void RenderWindow::setCameraSpeed(float value)
 
 void RenderWindow::handleInput()
 {
+    const float deltaTime = mTimeStart.nsecsElapsed() / 1000000000.f;
+
     //Camera
     mCurrentCamera->setSpeed(0.f);  //cancel last frame movement
     if(mInput.RMB)
@@ -470,7 +491,12 @@ void RenderWindow::handleInput()
             mCurrentCamera->updateHeigth(mCameraSpeed);
         if(mInput.E)
             mCurrentCamera->updateHeigth(-mCameraSpeed);
+
+        mSimulationTime += deltaTime;
     }
+
+    if (mInput.LMB)
+        mSimulationTime -= deltaTime;
 }
 
 void RenderWindow::keyPressEvent(QKeyEvent *event)
