@@ -82,6 +82,8 @@ public:
     GLfloat z;
 };
 
+typedef Vector3D vec3;
+
 } //namespace
 
 #endif // VECTOR3D_H
