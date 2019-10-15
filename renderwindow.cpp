@@ -143,7 +143,7 @@ void RenderWindow::init()
         max.z = (terrainPoints.back().z > max.z) ? terrainPoints.back().z : max.z;
     }
 
-    int xGridSize{10}, zGridSize{10};
+    int xGridSize{5}, zGridSize{5};
     terrainPoints = mapToGrid(terrainPoints, xGridSize, zGridSize, min, max);
     terrainPoints.shrink_to_fit();
 
@@ -165,18 +165,26 @@ void RenderWindow::init()
             mTerrainTriangles.push_back({{i, i + xGridSize, i + 1},
                                         {
                                             static_cast<int>(mTerrainTriangles.size()) + 1,
-                                            (z != 0) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) - (xGridSize - 1) * 2 - 1) : -1,
+                                            (z != 0) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) - (xGridSize - 1) * 2 + 1) : -1,
                                             (x != 0) ? static_cast<int>(mTerrainTriangles.size()) - 1 : -1
                                         }
                                         });
 
+            std::cout << "Added a triangle with index: " << mTerrainTriangles.back().index[0] << ", " << mTerrainTriangles.back().index[1]
+                      << ", " << mTerrainTriangles.back().index[2] << " and neighbours: " << mTerrainTriangles.back().neighbour[0]
+                      << ", " << mTerrainTriangles.back().neighbour[1] << ", " << mTerrainTriangles.back().neighbour[2] << std::endl;
+
             mTerrainTriangles.push_back({{i + 1, i + xGridSize, i + 1 + xGridSize} ,
                                         {
-                                            (z < zGridSize - 2) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) + (zGridSize - 1) * 2 + 1) : -1,
+                                            (z < zGridSize - 2) ? static_cast<int>(static_cast<int>(mTerrainTriangles.size()) + (zGridSize - 1) * 2 - 1) : -1,
                                             (x < xGridSize - 2) ? static_cast<int>(mTerrainTriangles.size() + 1) : -1,
                                             static_cast<int>(mTerrainTriangles.size()) - 1
                                         }
                                         });
+
+            std::cout << "Added a triangle with index: " << mTerrainTriangles.back().index[0] << ", " << mTerrainTriangles.back().index[1]
+                      << ", " << mTerrainTriangles.back().index[2] << " and neighbours: " << mTerrainTriangles.back().neighbour[0]
+                      << ", " << mTerrainTriangles.back().neighbour[1] << ", " << mTerrainTriangles.back().neighbour[2] << std::endl;
         }
     }
 
@@ -241,6 +249,11 @@ void RenderWindow::render()
 
         glUseProgram(mShaderProgram[0]->getProgram());
         mVisualObjects[2]->update(mSimulationTime);
+        if (isColliding(mVisualObjects[2]->mMatrix.getPosition(), 1.f))
+            std::cout << "It's colliding!" << std::endl;
+        else
+            std::cout << "It's not colliding!" << std::endl;
+
         glUniformMatrix4fv( vMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
         glUniformMatrix4fv( pMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
         glUniformMatrix4fv( mMatrixUniform0, 1, GL_TRUE, mVisualObjects[2]->mMatrix.constData());
@@ -346,6 +359,77 @@ void RenderWindow::setupTextureShader(int shaderIndex)
     vMatrixUniform1 = glGetUniformLocation( mShaderProgram[shaderIndex]->getProgram(), "vMatrix" );
     pMatrixUniform1 = glGetUniformLocation( mShaderProgram[shaderIndex]->getProgram(), "pMatrix" );
     mTextureUniform = glGetUniformLocation(mShaderProgram[shaderIndex]->getProgram(), "textureSampler");
+}
+
+gsl::vec3 RenderWindow::normalForce(Triangle *triangle)
+{
+    if (!triangle)
+        return {0, 0, 0};
+
+    mTerrainVertices;
+}
+
+bool RenderWindow::isColliding(gsl::vec3 ballPos, float ballRadius)
+{
+    auto* tri = getBallToPlaneTriangle(ballPos);
+    if (tri != nullptr)
+    {
+        gsl::vec3 normal = (mTerrainVertices.at(tri->index[1]).get_xyz() - mTerrainVertices.at(tri->index[0]).get_xyz())
+                ^ (mTerrainVertices.at(tri->index[2]).get_xyz() - mTerrainVertices.at(tri->index[0]).get_xyz());
+        normal.normalize();
+        std::cout << "Normal is: " << normal << std::endl;
+
+        auto toBall = gsl::project(ballPos - mTerrainVertices.at(tri->index[0]).get_xyz(), normal);
+
+        return toBall.length() < ballRadius && 0 < toBall * normal;
+    }
+    else
+        return false;
+}
+
+Triangle *RenderWindow::getBallToPlaneTriangle(gsl::vec3 ballPos)
+{
+    if (mTerrainTriangles.empty())
+        return nullptr;
+
+    unsigned int index = 0;
+    auto* t = &mTerrainTriangles.at(index);
+    std::array<gsl::vec3, 3> triangle;
+    for (unsigned int i{0}; i < 3; ++i)
+    {
+        triangle.at(i) = mTerrainVertices.at(t->index[i]).get_xyz();
+        triangle.at(i).y = 0.f;
+    }
+
+    gsl::vec3 bCoords = gsl::barCoord(gsl::vec3{ballPos.x, 0.f, ballPos.z}, triangle.at(0), triangle.at(1), triangle.at(2));
+    unsigned int lastIndex = std::numeric_limits<unsigned int>::max();
+    while (!(0 <= bCoords.x && 0 <= bCoords.y && 0 <= bCoords.z))
+    {
+        unsigned int lowestIndex{0};
+        lowestIndex = (bCoords.y < bCoords.x) ? 1 : lowestIndex;
+        lowestIndex = (bCoords.z < bCoords.x) ? 2 : lowestIndex;
+
+        if (t->neighbour[lowestIndex] < 0)
+            return nullptr;
+
+        unsigned int nextIndex = t->neighbour[lowestIndex];
+        if (lastIndex == nextIndex)
+            return nullptr;
+
+        lastIndex = index;
+        index = nextIndex;
+
+        t = &mTerrainTriangles.at(index);
+        for (unsigned int i{0}; i < 3; ++i)
+        {
+            triangle.at(i) = mTerrainVertices.at(t->index[i]).get_xyz();
+            triangle.at(i).y = 0.f;
+        }
+
+        bCoords = gsl::barCoord(gsl::vec3{ballPos.x, 0.f, ballPos.z}, triangle.at(0), triangle.at(1), triangle.at(2));
+    }
+
+    return t;
 }
 
 //This function is called from Qt when window is exposed (shown)

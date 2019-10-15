@@ -9,6 +9,16 @@
 
 class RenderWindow;
 
+struct Triangle
+{
+    Triangle(std::array<unsigned int, 3> indices = {}, std::array<int, 3> neighbours = {})
+        : index{indices[0], indices[1], indices[2]}, neighbour{neighbours[0], neighbours[1], neighbours[2]}
+    {}
+
+    unsigned int index[3];
+    int neighbour[3];
+};
+
 class VisualObject : public QOpenGLFunctions_4_1_Core {
 public:
     VisualObject();
@@ -22,6 +32,7 @@ public:
     gsl::Matrix4x4 mMatrix;
     gsl::vec3 startPos{};
     gsl::vec3 mAcceleration{};
+    float colliderRadius{1.f};
 
     std::string mName;
 

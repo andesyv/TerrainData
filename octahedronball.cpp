@@ -189,3 +189,13 @@ void OctahedronBall::update(float time)
     auto s = startPos + (mAcceleration * std::pow(time, 2)) / 2.f;
     mMatrix.setPosition(s.x, s.y, s.z);
 }
+
+gsl::vec3 OctahedronBall::getAcceleraton()
+{
+
+}
+
+Triangle OctahedronBall::getCollidingTriangle()
+{
+
+}

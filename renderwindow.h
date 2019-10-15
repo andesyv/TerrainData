@@ -24,16 +24,6 @@ class RenderWindow : public QWindow, protected QOpenGLFunctions_4_1_Core
 {
     Q_OBJECT
 public:
-
-    struct Triangle
-    {
-        Triangle(std::array<unsigned int, 3> indices = {}, std::array<int, 3> neighbours = {})
-            : index{indices[0], indices[1], indices[2]}, neighbour{neighbours[0], neighbours[1], neighbours[2]}
-        {}
-
-        unsigned int index[3];
-        int neighbour[3];
-    };
     RenderWindow(const QSurfaceFormat &format, MainWindow *mainWindow);
     ~RenderWindow() override;
 
@@ -77,6 +67,10 @@ private:
 
     std::vector<Triangle> mTerrainTriangles;
     GLuint mTerrainVAO;
+
+    gsl::vec3 normalForce(Triangle* triangle);
+    bool isColliding(gsl::vec3 ballPos, float ballRadius);
+    Triangle* getBallToPlaneTriangle(gsl::vec3 ballPos);
 
     Camera *mCurrentCamera{nullptr};
 

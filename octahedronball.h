@@ -25,6 +25,11 @@ public:
     void move(float deltaTime) override;
     void update(float time) override;
 
+    gsl::vec3 getAcceleraton();
+    Triangle getCollidingTriangle();
+
+
+
     ~OctahedronBall() override;
 };
 
