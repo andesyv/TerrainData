@@ -249,10 +249,9 @@ void RenderWindow::render()
 
         glUseProgram(mShaderProgram[0]->getProgram());
         mVisualObjects[2]->update(mSimulationTime);
-        if (isColliding(mVisualObjects[2]->mMatrix.getPosition(), 1.f))
-            std::cout << "It's colliding!" << std::endl;
-        else
-            std::cout << "It's not colliding!" << std::endl;
+
+
+        isColliding(mVisualObjects[2], 1.f);
 
         glUniformMatrix4fv( vMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
         glUniformMatrix4fv( pMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
@@ -361,17 +360,9 @@ void RenderWindow::setupTextureShader(int shaderIndex)
     mTextureUniform = glGetUniformLocation(mShaderProgram[shaderIndex]->getProgram(), "textureSampler");
 }
 
-gsl::vec3 RenderWindow::normalForce(Triangle *triangle)
+bool RenderWindow::isColliding(VisualObject* ball, float ballRadius)
 {
-    if (!triangle)
-        return {0, 0, 0};
-
-    mTerrainVertices;
-}
-
-bool RenderWindow::isColliding(gsl::vec3 ballPos, float ballRadius)
-{
-    auto* tri = getBallToPlaneTriangle(ballPos);
+    auto* tri = getBallToPlaneTriangle(ball->mMatrix.getPosition());
     if (tri != nullptr)
     {
         gsl::vec3 normal = (mTerrainVertices.at(tri->index[1]).get_xyz() - mTerrainVertices.at(tri->index[0]).get_xyz())
@@ -379,12 +370,21 @@ bool RenderWindow::isColliding(gsl::vec3 ballPos, float ballRadius)
         normal.normalize();
         std::cout << "Normal is: " << normal << std::endl;
 
-        auto toBall = gsl::project(ballPos - mTerrainVertices.at(tri->index[0]).get_xyz(), normal);
+        auto toBall = gsl::project(ball->mMatrix.getPosition() - mTerrainVertices.at(tri->index[0]).get_xyz(), normal);
 
-        return toBall.length() < ballRadius && 0 < toBall * normal;
+        if (toBall.length() < ballRadius && 0 < toBall * normal)
+        {
+            // Calculate force
+            ball->mAcceleration = gsl::project(gsl::vec3{0.f, 9.81f, 0.f}, normal);
+
+            return true;
+        }
     }
     else
+    {
+        ball->mAcceleration = gsl::vec3{0.f, -9.81, 0.f};
         return false;
+    }
 }
 
 Triangle *RenderWindow::getBallToPlaneTriangle(gsl::vec3 ballPos)

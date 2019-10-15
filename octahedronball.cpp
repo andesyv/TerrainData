@@ -194,8 +194,3 @@ gsl::vec3 OctahedronBall::getAcceleraton()
 {
 
 }
-
-Triangle OctahedronBall::getCollidingTriangle()
-{
-
-}

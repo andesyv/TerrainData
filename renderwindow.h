@@ -68,8 +68,7 @@ private:
     std::vector<Triangle> mTerrainTriangles;
     GLuint mTerrainVAO;
 
-    gsl::vec3 normalForce(Triangle* triangle);
-    bool isColliding(gsl::vec3 ballPos, float ballRadius);
+    bool isColliding(VisualObject *ball, float ballRadius);
     Triangle* getBallToPlaneTriangle(gsl::vec3 ballPos);
 
     Camera *mCurrentCamera{nullptr};

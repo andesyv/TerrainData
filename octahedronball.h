@@ -26,7 +26,6 @@ public:
     void update(float time) override;
 
     gsl::vec3 getAcceleraton();
-    Triangle getCollidingTriangle();
 
 
 
