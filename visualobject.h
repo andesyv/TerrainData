@@ -32,6 +32,7 @@ public:
     gsl::Matrix4x4 mMatrix;
     gsl::vec3 startPos{};
     gsl::vec3 mAcceleration{};
+    gsl::vec3 velocity;
     float colliderRadius{1.f};
 
     std::string mName;

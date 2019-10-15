@@ -38,6 +38,7 @@ public:
     static float length(const gsl::Vector3D &a, const gsl::Vector3D &b);
 
 
+    void moveBall(float deltaTime);
 private slots:
     void render();
 
@@ -68,7 +69,7 @@ private:
     std::vector<Triangle> mTerrainTriangles;
     GLuint mTerrainVAO;
 
-    bool isColliding(VisualObject *ball, float ballRadius);
+    std::pair<bool, gsl::vec3> isColliding(VisualObject *ball, float ballRadius);
     Triangle* getBallToPlaneTriangle(gsl::vec3 ballPos);
 
     Camera *mCurrentCamera{nullptr};

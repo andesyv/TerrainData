@@ -248,11 +248,10 @@ void RenderWindow::render()
         mVisualObjects[0]->draw();
 
         glUseProgram(mShaderProgram[0]->getProgram());
-        mVisualObjects[2]->update(mSimulationTime);
 
 
-        isColliding(mVisualObjects[2], 1.f);
 
+        moveBall(deltaTime);
         glUniformMatrix4fv( vMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mViewMatrix.constData());
         glUniformMatrix4fv( pMatrixUniform0, 1, GL_TRUE, mCurrentCamera->mProjectionMatrix.constData());
         glUniformMatrix4fv( mMatrixUniform0, 1, GL_TRUE, mVisualObjects[2]->mMatrix.constData());
@@ -360,7 +359,29 @@ void RenderWindow::setupTextureShader(int shaderIndex)
     mTextureUniform = glGetUniformLocation(mShaderProgram[shaderIndex]->getProgram(), "textureSampler");
 }
 
-bool RenderWindow::isColliding(VisualObject* ball, float ballRadius)
+void RenderWindow::moveBall(float deltaTime)
+{
+    auto& ball = *mVisualObjects[2];
+    ball.velocity += ball.mAcceleration * deltaTime;
+    auto pos = ball.mMatrix.getPosition() + ball.velocity * deltaTime;
+
+    auto hitResults = isColliding(&ball, 1.f);
+    if (hitResults.first)
+    {
+        ball.velocity -= gsl::project(ball.velocity, hitResults.second);
+        pos = ball.mMatrix.getPosition() + ball.velocity * deltaTime +
+                (gsl::project(-ball.mAcceleration, hitResults.second) + ball.mAcceleration) * std::pow(deltaTime, 2) * 0.5f;
+    }
+    else
+    {
+        pos = ball.mMatrix.getPosition() + ball.velocity * deltaTime;
+    }
+
+    ball.mMatrix.setPosition(pos.x, pos.y, pos.z);
+    // std::cout << "velocity: " << ball.velocity << std::endl;
+}
+
+std::pair<bool, gsl::vec3> RenderWindow::isColliding(VisualObject* ball, float ballRadius)
 {
     auto* tri = getBallToPlaneTriangle(ball->mMatrix.getPosition());
     if (tri != nullptr)
@@ -368,23 +389,18 @@ bool RenderWindow::isColliding(VisualObject* ball, float ballRadius)
         gsl::vec3 normal = (mTerrainVertices.at(tri->index[1]).get_xyz() - mTerrainVertices.at(tri->index[0]).get_xyz())
                 ^ (mTerrainVertices.at(tri->index[2]).get_xyz() - mTerrainVertices.at(tri->index[0]).get_xyz());
         normal.normalize();
-        std::cout << "Normal is: " << normal << std::endl;
+        // std::cout << "Normal is: " << normal << std::endl;
 
         auto toBall = gsl::project(ball->mMatrix.getPosition() - mTerrainVertices.at(tri->index[0]).get_xyz(), normal);
 
         if (toBall.length() < ballRadius && 0 < toBall * normal)
         {
             // Calculate force
-            ball->mAcceleration = gsl::project(gsl::vec3{0.f, 9.81f, 0.f}, normal);
-
-            return true;
+            return {true, normal};
         }
     }
-    else
-    {
-        ball->mAcceleration = gsl::vec3{0.f, -9.81, 0.f};
-        return false;
-    }
+    // ball->mAcceleration = gsl::vec3{0.f, -9.81, 0.f};
+    return {false, {0, 0, 0}};
 }
 
 Triangle *RenderWindow::getBallToPlaneTriangle(gsl::vec3 ballPos)
@@ -576,10 +592,16 @@ void RenderWindow::handleInput()
         if(mInput.E)
             mCurrentCamera->updateHeigth(-mCameraSpeed);
 
-        mSimulationTime += deltaTime;
+        // mSimulationTime += deltaTime;
     }
 
     if (mInput.LMB)
+    {
+        mVisualObjects[2]->mAcceleration = gsl::vec3{0.f, -9.81f, 0.f};
+        mVisualObjects[2]->velocity = gsl::vec3{0, 0, 0};
+        mVisualObjects[2]->mMatrix.setToIdentity();
+        mVisualObjects[2]->mMatrix.setPosition(0.f, 10.f, 0.f);
+    }
         mSimulationTime -= deltaTime;
 }
 
